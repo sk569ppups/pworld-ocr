@@ -1,29 +1,32 @@
-// app.js — PDF.mjs版（リポジトリ内 libs を使用）
+// app.js — 入力シート出力版（PDFは libs/pdf.mjs を使用）
 import { normalizeName } from './normalize.js';
 
 // --- PDF.js 読み込み（libs から ESM を動的 import）---
 async function ensurePdfJs(){
   if (window.pdfjsLib) return window.pdfjsLib;
-
-  // libs/pdf.mjs を ESM として読み込む
   const pdfjsModule = await import('./libs/pdf.mjs');
   window.pdfjsLib = pdfjsModule;
-
-  // worker の場所を指定（libs/pdf.worker.mjs）
   pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.mjs';
-
   return window.pdfjsLib;
 }
 
 // ---- 要素参照 ----
-const fileInput  = document.getElementById('fileInput');
-const masterInput= document.getElementById('masterInput');
-const dropzone   = document.getElementById('dropzone');
-const runBtn     = document.getElementById('runBtn');
-const dlCsvBtn   = document.getElementById('dlCsvBtn');
-const dlXlsxBtn  = document.getElementById('dlXlsxBtn');
-const progress   = document.getElementById('progress');
-const tbody      = document.querySelector('#resultTable tbody');
+const fileInput   = document.getElementById('fileInput');
+const masterInput = document.getElementById('masterInput');
+const dropzone    = document.getElementById('dropzone');
+const runBtn      = document.getElementById('runBtn');
+const dlCsvBtn    = document.getElementById('dlCsvBtn');
+const dlXlsxBtn   = document.getElementById('dlXlsxBtn');
+const progress    = document.getElementById('progress');
+const tbody       = document.querySelector('#resultTable tbody');
+
+// 追加した3つ（index.htmlに入れたやつ）
+const storeName   = document.getElementById('storeName');
+const storeGroup  = document.getElementById('storeGroup');
+const acqDate     = document.getElementById('acqDate');
+
+// 取得日を今日で初期化
+if (acqDate && !acqDate.value) acqDate.value = new Date().toISOString().slice(0,10);
 
 let files = [];
 let resultsRows = [];
@@ -79,7 +82,7 @@ runBtn.addEventListener('click', async ()=>{
     if ((f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf')){
       progress.textContent = `${f.name} を読み込み中…`;
       const arrbuf = await f.arrayBuffer();
-      const pdfjs = await ensurePdfJs();               // ← libs から読み込み
+      const pdfjs = await ensurePdfJs();
       const pdf   = await pdfjs.getDocument({ data: arrbuf }).promise;
 
       for (let p=1; p<=pdf.numPages; p++){
@@ -190,6 +193,17 @@ function pickMachineLines(bigText){
   return [...new Set(out)];
 }
 
+// 検索用の“キー列”生成
+function keyify(s){
+  if (!s) return '';
+  let t = s.normalize('NFKC')
+    .replace(/[・･•·．\.\-ー_＿~～\[\]【】（）\(\)「」『』<>{}<>※☆★◆▼▲◀▶|｜／/\\,:;！!？?\s]/g, '')
+    .replace(/ゃ/g,'や').replace(/ゅ/g,'ゆ').replace(/ょ/g,'よ')
+    .replace(/ャ/g,'ヤ').replace(/ュ/g,'ユ').replace(/ョ/g,'ヨ')
+    .replace(/っ/g,'つ').replace(/ッ/g,'ツ');
+  return t.toUpperCase();
+}
+
 // 簡易ベストマッチ（バイグラムJaccard）
 function bestMatch(s, arr){
   let best={target:'', rating:0};
@@ -207,7 +221,7 @@ function similarity(a,b){
 }
 function ngrams(s,n){ const xs=[]; for(let i=0;i<s.length-(n-1);i++) xs.push(s.slice(i,i+n)); return xs; }
 
-// 表描画
+// 表描画（確認用テーブルは既存のまま）
 function renderTable(rows){
   tbody.innerHTML = rows.map((r,i)=>`
     <tr>
@@ -222,26 +236,43 @@ function renderTable(rows){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-// ダウンロード
+// === ここから出力を“右のシート形式”に統一 ===
+function buildOutputRows(){
+  const store  = (storeName?.value || '').trim();
+  const group  = (storeGroup?.value || '').trim();
+  const ymd    = (acqDate?.value || new Date().toISOString().slice(0,10)).replaceAll('-','/'); // 2025/08/31
+
+  const header = ['店舗名','機種名','取得日','台数','店グループ','キー列'];
+  const body = resultsRows.map(r=>{
+    const name = r.matched_master || r.normalized || r.raw || '';
+    const key  = keyify(name);
+    return [store, name, ymd, '', group, key];
+  });
+  return { header, body };
+}
+
+// CSVダウンロード（右の“入力シート”形式）
 dlCsvBtn.addEventListener('click', ()=>{
-  const header = ['raw','normalized','matched_master','score','method'];
-  const lines = [header.join(',')].concat(
-    resultsRows.map(r => header.map(k => `"${String(r[k]??'').replace(/"/g,'""')}"`).join(','))
+  const { header, body } = buildOutputRows();
+  const lines = [header].concat(body).map(cols =>
+    cols.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')
   );
   const blob = new Blob([lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `machines_${dateStamp()}.csv`;
+  a.download = `入力シート_${dateStamp()}.csv`;
   a.click();
 });
+
+// Excelダウンロード（右の“入力シート”形式）
 dlXlsxBtn.addEventListener('click', ()=>{
-  const header = ['raw','normalized','matched_master','score','method'];
-  const data = [header].concat(resultsRows.map(r => header.map(k => r[k]??'')));
+  const { header, body } = buildOutputRows();
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, 'Normalized');
-  XLSX.writeFile(wb, `machines_${dateStamp()}.xlsx`);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
+  XLSX.utils.book_append_sheet(wb, ws, '入力シート');
+  XLSX.writeFile(wb, `入力シート_${dateStamp()}.xlsx`);
 });
+
 function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
