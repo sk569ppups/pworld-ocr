@@ -1,4 +1,4 @@
-// app.js — 入力シート出力版（PDFは libs/pdf.mjs を使用）
+// app.js — 完全版（PDF.mjs対応・誤OCR補正・賢い分割・マスター突合・入力シート出力）
 import { normalizeName } from './normalize.js';
 
 // --- PDF.js 読み込み（libs から ESM を動的 import）---
@@ -20,13 +20,11 @@ const dlXlsxBtn   = document.getElementById('dlXlsxBtn');
 const progress    = document.getElementById('progress');
 const tbody       = document.querySelector('#resultTable tbody');
 
-// 追加した3つ（index.htmlに入れたやつ）
+// 追加（index.htmlで作ったやつ）
 const storeName   = document.getElementById('storeName');
 const storeGroup  = document.getElementById('storeGroup');
 const acqDate     = document.getElementById('acqDate');
-
-// 取得日を今日で初期化
-if (acqDate && !acqDate.value) acqDate.value = new Date().toISOString().slice(0,10);
+if (acqDate && !acqDate.value) acqDate.value = new Date().toISOString().slice(0,10); // YYYY-MM-DD
 
 let files = [];
 let resultsRows = [];
@@ -47,16 +45,44 @@ dropzone.addEventListener('drop', (e)=>{
   dropzone.classList.remove('dragover');
 });
 
-// ---- マスターCSV 読込（任意） ----
+// ---- よく出る誤OCRの自動補正（必要に応じて増やしてOK）----
+function autocorrectOCR(s){
+  return String(s)
+    // 代表例：固有名詞のゆれ
+    .replace(/新志記/g, '新世紀')
+    .replace(/エバンゲリオン/g, 'エヴァンゲリオン')
+    .replace(/Reゼロ|Ｒｅゼロ|ﾘｾﾞﾛ/g, 'Re:ゼロ')
+    .replace(/ﾌﾞﾗｯｸ/g, 'BLACK')
+    // 全角英数 → 半角 & 正規化
+    .normalize('NFKC')
+    // 末尾の「○台」以降は削る（台数は別管理）
+    .replace(/[0-9０-９]+\s*台.*$/, '')
+    .trim();
+}
+
+// ---- マスターCSV / XLSX 読込（1列目=正規名、2列目以降=別名）----
 masterInput.addEventListener('change', async (e)=>{
   const f = e.target.files?.[0];
   if (!f) return;
-  const text = await f.text();
-  const rows = text.split(/\r?\n/).map(line => line.split(','));
+
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  let rows = [];
+
+  if (ext === 'csv') {
+    const text = await f.text();
+    rows = text.split(/\r?\n/).map(line => line.split(','));
+  } else {
+    // xlsx / xls
+    const ab = await f.arrayBuffer();
+    const wb = XLSX.read(ab, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  }
+
   masterCanon = [];
   masterAlias = new Map();
   for (let i=1; i<rows.length; i++){
-    const cols = rows[i].map(c => normalizeName(String(c||'')));
+    const cols = (rows[i] || []).map(c => normalizeName(autocorrectOCR(String(c||''))));
     const key = cols[0];
     if (!key) continue;
     masterCanon.push(key);
@@ -87,7 +113,7 @@ runBtn.addEventListener('click', async ()=>{
 
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 3.0 });//高精細レンダリング
+        const viewport = page.getViewport({ scale: 3.0 }); // ★ 高精細レンダリング（2→3）
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = viewport.width; canvas.height = viewport.height;
@@ -108,12 +134,15 @@ runBtn.addEventListener('click', async ()=>{
     }
   }
 
-  // 抽出→整形→重複除去
+  // 抽出→補正→正規化→重複除去
   const candidates = pickMachineLines(allTexts.join('\n'));
-  const normalized = [...new Set(candidates.map(normalizeName))];
+  const normalized = [...new Set(candidates.map(x => normalizeName(autocorrectOCR(x))))];
 
-  // マスター突合（任意）
-  resultsRows = normalized.map(n => {
+  // （任意強化）マスターがある時は“それっぽい”候補だけ残す
+  const filtered = roughFilterByMaster(normalized, masterCanon);
+
+  // マスター突合
+  resultsRows = filtered.map(n => {
     let match = '', score = 0, method = '';
     if (masterAlias.size && masterAlias.has(n)){
       match = masterAlias.get(n); score = 100; method = 'alias_map';
@@ -181,67 +210,50 @@ function fileToDataURL(f){
 // 行抽出（“機種らしさ”を見て賢く分割）
 function pickMachineLines(bigText){
   // 前処理：OCRの変な記号を均す
-  let txt = bigText
-    .replace(/\r/g, '')
-    .replace(/[‐-‒–—―]/g, 'ー')   // ダッシュ類
-    .replace(/[､，]/g, '、')
-    .replace(/[・･•·]/g, '・')
-    .replace(/[｜|]/g, '｜')
-    .replace(/[／/]/g, '／');
+  let txt = bigText.replace(/\r/g,'')
+    .replace(/[‐-‒–—―]/g,'ー')
+    .replace(/[､，]/g,'、')
+    .replace(/[・･•·]/g,'・')
+    .replace(/[｜|]/g,'｜')
+    .replace(/[／/]/g,'／');
 
-  const lines = txt.split('\n')
-    .map(s => s.trim())
-    .filter(Boolean);
-
+  const lines = txt.split('\n').map(s=>s.trim()).filter(Boolean);
   const chunks = [];
-
   const NG = /(設置|台数|アクセス|地図|求人|お問い合わせ|会社概要|交通|駐輪|駐車|貯玉|レート|休憩|遊技|会員|LINE|Twitter|Instagram)/;
 
-  // 1) ざっくりスプリット（句読点・中黒・スラッシュ等）
   for (let line of lines){
     if (NG.test(line)) continue;
 
-    // 台数以降は捨てる（「… 12台」みたいなのをカット）
-    line = line.replace(/[0-9０-９]+\s*台.*$/, '');
+    // 句読点・中黒・縦線・スラッシュで一次分割
+    let parts = line.split(/[・｜／、;；]+/).map(p=>p.trim()).filter(Boolean);
 
-    // 句読点や中黒で一次分割
-    let parts = line.split(/[・｜／、;；]+/).map(p => p.trim()).filter(Boolean);
-
-    // 2) 一部がまだ長い＆複数機種がくっ付いていそうなら、P/S/スマスロを起点に再分割
+    // 「P/S/スマスロ」っぽい境界で再分割
     const reStart = /(?=(?:^|[^A-Za-z0-9ぁ-んァ-ヶ一-龠])(?:P|S|Ｐ|Ｓ|スマスロ))/g;
     const refined = [];
-    for (let p of parts){
-      // “機種スタート”の候補が複数ある = くっ付いている
-      const starts = [...p.matchAll(reStart)].map(m => m.index).filter(i => i !== undefined);
+    for (const p of parts){
+      const starts = [...p.matchAll(reStart)].map(m=>m.index).filter(i=>i!==undefined);
       if (starts.length > 1){
-        // 開始位置ごとに切り出し
-        for (let i = 0; i < starts.length; i++){
-          const a = starts[i], b = (i+1 < starts.length) ? starts[i+1] : p.length;
-          refined.push(p.slice(a, b).trim());
+        for (let i=0;i<starts.length;i++){
+          const a=starts[i], b=(i+1<starts.length)?starts[i+1]:p.length;
+          refined.push(p.slice(a,b).trim());
         }
-      } else {
+      }else{
         refined.push(p);
       }
     }
 
-    for (const c of refined){
-      const t = c
-        // ノイズ削り
-        .replace(/\s{2,}/g, ' ')
-        .replace(/[※☆★◆▼▲◀▶＾~～…。・]+$/g, '')
+    for (let c of refined){
+      c = autocorrectOCR(c)
+        .replace(/\s{2,}/g,' ')
+        .replace(/[※☆★◆▼▲◀▶＾~～…。・]+$/g,'')
         .trim();
 
-      // “機種らしさ”チェック
-      const looksLikeModel =
-        /^(?:P|S|Ｐ|Ｓ|スマスロ)/.test(t) || /[ァ-ヶｦ-ﾟ一-龠A-Za-z0-9]{3,}/.test(t);
+      const looksLike =
+        /^(?:P|S|Ｐ|Ｓ|スマスロ)/.test(c) || /[ァ-ヶｦ-ﾟ一-龠A-Za-z0-9]{3,}/.test(c);
 
-      if (t && looksLikeModel && t.length <= 80){
-        chunks.push(t);
-      }
+      if (c && looksLike && c.length<=80) chunks.push(c);
     }
   }
-
-  // 重複除去
   return [...new Set(chunks)];
 }
 
@@ -254,6 +266,20 @@ function keyify(s){
     .replace(/ャ/g,'ヤ').replace(/ュ/g,'ユ').replace(/ョ/g,'ヨ')
     .replace(/っ/g,'つ').replace(/ッ/g,'ツ');
   return t.toUpperCase();
+}
+
+// （任意強化）マスターで粗フィルタ：似度0.55未満を除外
+function roughFilterByMaster(names, master){
+  if (!master || master.length===0) return names;
+  const keep = [];
+  for (const n of names){
+    let ok=false;
+    for (const m of master){
+      if (similarity(n,m) >= 0.55){ ok=true; break; }
+    }
+    if (ok) keep.push(n);
+  }
+  return keep;
 }
 
 // 簡易ベストマッチ（バイグラムJaccard）
@@ -273,7 +299,7 @@ function similarity(a,b){
 }
 function ngrams(s,n){ const xs=[]; for(let i=0;i<s.length-(n-1);i++) xs.push(s.slice(i,i+n)); return xs; }
 
-// 表描画（確認用テーブルは既存のまま）
+// 表描画（確認用テーブル）
 function renderTable(rows){
   tbody.innerHTML = rows.map((r,i)=>`
     <tr>
@@ -288,11 +314,11 @@ function renderTable(rows){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-// === ここから出力を“右のシート形式”に統一 ===
+// === ここから出力を“入力シート”形式に統一 ===
 function buildOutputRows(){
   const store  = (storeName?.value || '').trim();
   const group  = (storeGroup?.value || '').trim();
-  const ymd    = (acqDate?.value || new Date().toISOString().slice(0,10)).replaceAll('-','/'); // 2025/08/31
+  const ymd    = (acqDate?.value || new Date().toISOString().slice(0,10)).replaceAll('-','/'); // 2025/09/15 → 2025/09/15
 
   const header = ['店舗名','機種名','取得日','台数','店グループ','キー列'];
   const body = resultsRows.map(r=>{
@@ -303,20 +329,21 @@ function buildOutputRows(){
   return { header, body };
 }
 
-// CSVダウンロード（右の“入力シート”形式）
+// CSVダウンロード（UTF-8 BOM付きでExcelでも文字化けしない）
 dlCsvBtn.addEventListener('click', ()=>{
   const { header, body } = buildOutputRows();
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // BOM
   const lines = [header].concat(body).map(cols =>
     cols.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')
   );
-  const blob = new Blob([lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+  const blob = new Blob([bom, lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `入力シート_${dateStamp()}.csv`;
   a.click();
 });
 
-// Excelダウンロード（右の“入力シート”形式）
+// Excelダウンロード（入力シート）
 dlXlsxBtn.addEventListener('click', ()=>{
   const { header, body } = buildOutputRows();
   const wb = XLSX.utils.book_new();
@@ -329,4 +356,3 @@ function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
 }
-
