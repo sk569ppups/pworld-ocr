@@ -29,6 +29,29 @@
     </section>
 
     <section class="controls">
+  <label>
+    店舗名：
+    <input id="storeName" type="text" placeholder="例：コトナプラス鹿浜店" />
+  </label>
+  <label>
+    店グループ：
+    <input id="storeGroup" type="text" placeholder="例：自店 / Aグループ" />
+  </label>
+  <label>
+    取得日：
+    <input id="acqDate" type="date" />
+  </label>
+
+  <label>
+    マスターCSV（任意：1列目=正規名、2列目以降=別名）：
+    <input id="masterInput" type="file" accept=".csv" />
+  </label>
+
+  <button id="runBtn">OCR 実行</button>
+  <button id="dlCsvBtn" disabled>CSV ダウンロード</button>
+  <button id="dlXlsxBtn" disabled>Excel(xlsx) ダウンロード</button>
+</section>
+
       <label>
         マスターCSV（任意：1列目=正規名、2列目以降=別名）：
         <input id="masterInput" type="file" accept=".csv" />
@@ -71,4 +94,5 @@
 <script type="module" src="./app.js"></script>
 </body>
 </html>
+
 
