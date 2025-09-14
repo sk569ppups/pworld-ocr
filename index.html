@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>P-WORLD 機種抽出（OCR→Excel）</title>
+<link rel="stylesheet" href="./styles.css" />
+<!-- tesseract.js（OCR） -->
+<script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+<!-- SheetJS（XLSX出力） -->
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- pdf.js（PDF→Canvas描画） -->
+<script src="https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.min.js"></script>
+</head>
+<body>
+<header>
+<h1>P-WORLD 機種抽出（画像/PDF アップロード → OCR → CSV/XLSX）</h1>
+<p class="note">
+使い方：P-WORLD店舗ページの「設置機種」部分をスクショ（PNG/JPG）またはPDFで用意し、
+下のエリアにドラッグ&ドロップするか「ファイル選択」してください。複数枚OKです。
+</p>
+</header>
+
+
+<main>
+<section class="uploader" id="uploader">
+<input id="fileInput" type="file" accept="image/*,.pdf" multiple />
+<div class="dropzone" id="dropzone">
+<p>ここに画像(PNG/JPG)やPDFをドロップ<br/>またはクリックして選択</p>
+</div>
+</section>
+
+
+<section class="controls">
+<label>
+マスターCSV（任意・1列目=正規化後の理想名、2列目以降=別名）：
+<input id="masterInput" type="file" accept=".csv" />
+</label>
+<button id="runBtn">OCR 実行</button>
+<button id="dlCsvBtn" disabled>CSV ダウンロード</button>
+<button id="dlXlsxBtn" disabled>Excel(xlsx) ダウンロード</button>
+</section>
+
+
+<section class="progress" id="progress"></section>
+
+
+<section class="tablewrap">
+<table id="resultTable">
+<thead>
+<tr>
+<th>#</th>
+<th>raw（OCR）</th>
+<th>normalized（整形）</th>
+<th>matched_master</th>
+<th>score</th>
+<th>method</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</section>
+</main>
+
+
+<footer>
+<p class="small">※ アップロードされた画像/PDFはサーバへ送信されず、ブラウザ内だけで処理します。</p>
+</footer>
+
+
+<script>
+// pdf.js ワーカー設定
+if (window['pdfjsLib']) {
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.js';
+}
+</script>
+<script src="./normalize.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
