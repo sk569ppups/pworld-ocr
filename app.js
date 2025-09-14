@@ -105,6 +105,48 @@ runBtn.addEventListener('click', async ()=>{
 
 // --- OCR（進捗％表示 & エラーハンドル） ---
 async function ocrImageDataURL(dataUrl, label=''){
+  progress.textContent = `${label} をOCR開始…`;
+  try {
+    const res = await Tesseract.recognize(dataUrl, 'jpn', {
+      logger: m => {
+        if (m.status){
+          if (typeof m.progress === 'number'){
+            const pct = Math.round(m.progress * 100);
+            progress.textContent = `${label}：${m.status} ${pct}%`;
+          } else {
+            progress.textContent = `${label}：${m.status}`;
+          }
+        }
+      }
+    });
+    let txt = (res?.data?.text || '').trim();
+
+    if (!txt){
+      progress.textContent = `${label} 日本語OCRで結果なし → 英数モードに切替`;
+      const res2 = await Tesseract.recognize(dataUrl, 'eng', {
+        logger: m => {
+          if (m.status){
+            if (typeof m.progress === 'number'){
+              const pct = Math.round(m.progress * 100);
+              progress.textContent = `${label}（英数）:${m.status} ${pct}%`;
+            } else {
+              progress.textContent = `${label}（英数）:${m.status}`;
+            }
+          }
+        }
+      });
+      txt = (res2?.data?.text || '').trim();
+    }
+
+    progress.textContent = `${label} OCR完了`;
+    return txt.replace(/\r?\n/g, '\n');
+  } catch (e){
+    console.error(e);
+    progress.textContent = `OCRエラー：${e?.message || e}`;
+    return '';
+  }
+}
+
   progress.textContent = `${label} をOCR準備中…`;
   try{
     const res = await Tesseract.recognize(dataUrl, 'jpn', {
@@ -212,3 +254,4 @@ function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
 }
+
