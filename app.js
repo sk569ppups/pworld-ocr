@@ -1,22 +1,23 @@
-// app.js — 完全版（Illegal return対策済み）
+// app.js — PDF読み込みの保証(ensurePdfJs)付き 完全版
 import { normalizeName } from './normalize.js';
-// pdf.js を未読込なら動的に読み込む
+
+// --- pdf.js を未読込なら動的に読み込む ---
 async function ensurePdfJs(){
   if (window.pdfjsLib) return window.pdfjsLib;
   await new Promise((res, rej)=>{
     const s = document.createElement('script');
-    s.src = 'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.min.js';
-    s.onload = res;
-    s.onerror = rej;
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.min.js';
+    s.onload = () => res();
+    s.onerror = (e) => rej(new Error('pdf.js load failed'));
     document.head.appendChild(s);
   });
-  if (!window.pdfjsLib) throw new Error('failed to load pdf.js');
+  if (!window.pdfjsLib) throw new Error('failed to load pdf.js (window.pdfjsLib not found)');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.js';
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js';
   return window.pdfjsLib;
 }
 
-
+// ---- 要素参照 ----
 const fileInput  = document.getElementById('fileInput');
 const masterInput= document.getElementById('masterInput');
 const dropzone   = document.getElementById('dropzone');
@@ -31,7 +32,7 @@ let resultsRows = [];
 let masterCanon = [];         // 正規名（キー）
 let masterAlias = new Map();  // 別名→正規名
 
-// --- ファイル選択/ドロップ ---
+// ---- ファイル選択/ドロップ ----
 fileInput.addEventListener('change', (e)=>{
   files = Array.from(e.target.files || []);
   dropzone.classList.remove('dragover');
@@ -45,7 +46,7 @@ dropzone.addEventListener('drop', (e)=>{
   dropzone.classList.remove('dragover');
 });
 
-// --- マスターCSV 読込（任意） ---
+// ---- マスターCSV 読込（任意） ----
 masterInput.addEventListener('change', async (e)=>{
   const f = e.target.files?.[0];
   if (!f) return;
@@ -66,7 +67,7 @@ masterInput.addEventListener('change', async (e)=>{
   progress.textContent = `マスター読込: ${masterCanon.length}件`;
 });
 
-// --- OCR 実行 ---
+// ---- OCR 実行 ----
 runBtn.addEventListener('click', async ()=>{
   if (!files.length){ alert('画像またはPDFを選択してください'); return; }
   runBtn.disabled = true; dlCsvBtn.disabled = true; dlXlsxBtn.disabled = true;
@@ -75,11 +76,13 @@ runBtn.addEventListener('click', async ()=>{
   const allTexts = [];
   for (let i=0; i<files.length; i++){
     const f = files[i];
+
+    // --- PDF ---
     if ((f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf')){
       progress.textContent = `${f.name} を読み込み中…`;
       const arrbuf = await f.arrayBuffer();
-const pdfjs = await ensurePdfJs(); // ここでpdf.jsをロードして取得
-const pdf = await pdfjs.getDocument({ data: arrbuf }).promise;
+      const pdfjs = await ensurePdfJs(); // ← ここで pdf.js を必ずロード
+      const pdf   = await pdfjs.getDocument({ data: arrbuf }).promise;
 
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
@@ -92,10 +95,13 @@ const pdf = await pdfjs.getDocument({ data: arrbuf }).promise;
         const text = await ocrImageDataURL(dataUrl, `${f.name} p${p}/${pdf.numPages}`);
         allTexts.push(text);
       }
+
+    // --- 画像 ---
     } else if ((f.type || '').startsWith('image/')){
       const dataUrl = await fileToDataURL(f);
       const text = await ocrImageDataURL(dataUrl, f.name);
       allTexts.push(text);
+
     } else {
       console.warn('未対応ファイル:', f.name);
     }
@@ -122,7 +128,7 @@ const pdf = await pdfjs.getDocument({ data: arrbuf }).promise;
   runBtn.disabled = false; dlCsvBtn.disabled = false; dlXlsxBtn.disabled = false;
 });
 
-// --- OCR（進捗表示つき）---
+// ---- OCR（進捗表示つき）---
 async function ocrImageDataURL(dataUrl, label=''){
   progress.textContent = `${label} をOCR開始…`;
   try {
@@ -166,7 +172,7 @@ async function ocrImageDataURL(dataUrl, label=''){
   }
 }
 
-// --- ユーティリティ ---
+// ---- ユーティリティ ----
 function fileToDataURL(f){
   return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
 }
@@ -218,7 +224,7 @@ function renderTable(rows){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-// CSV/XLSX ダウンロード
+// ダウンロード
 dlCsvBtn.addEventListener('click', ()=>{
   const header = ['raw','normalized','matched_master','score','method'];
   const lines = [header.join(',')].concat(
@@ -242,4 +248,3 @@ function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
 }
-
