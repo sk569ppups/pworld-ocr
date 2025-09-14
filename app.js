@@ -1,19 +1,17 @@
-// app.js — PDF読み込みの保証(ensurePdfJs)付き 完全版
+// app.js — PDF.mjs版（リポジトリ内 libs を使用）
 import { normalizeName } from './normalize.js';
 
-// --- pdf.js を未読込なら動的に読み込む ---
+// --- PDF.js 読み込み（libs から ESM を動的 import）---
 async function ensurePdfJs(){
   if (window.pdfjsLib) return window.pdfjsLib;
-  await new Promise((res, rej)=>{
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.min.js';
-    s.onload = () => res();
-    s.onerror = (e) => rej(new Error('pdf.js load failed'));
-    document.head.appendChild(s);
-  });
-  if (!window.pdfjsLib) throw new Error('failed to load pdf.js (window.pdfjsLib not found)');
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js';
+
+  // libs/pdf.mjs を ESM として読み込む
+  const pdfjsModule = await import('./libs/pdf.mjs');
+  window.pdfjsLib = pdfjsModule;
+
+  // worker の場所を指定（libs/pdf.worker.mjs）
+  pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.mjs';
+
   return window.pdfjsLib;
 }
 
@@ -81,7 +79,7 @@ runBtn.addEventListener('click', async ()=>{
     if ((f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf')){
       progress.textContent = `${f.name} を読み込み中…`;
       const arrbuf = await f.arrayBuffer();
-      const pdfjs = await ensurePdfJs(); // ← ここで pdf.js を必ずロード
+      const pdfjs = await ensurePdfJs();               // ← libs から読み込み
       const pdf   = await pdfjs.getDocument({ data: arrbuf }).promise;
 
       for (let p=1; p<=pdf.numPages; p++){
