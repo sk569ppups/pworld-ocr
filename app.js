@@ -1,3 +1,4 @@
+// app.js — 完全版（Illegal return対策済み）
 import { normalizeName } from './normalize.js';
 
 const fileInput  = document.getElementById('fileInput');
@@ -103,7 +104,7 @@ runBtn.addEventListener('click', async ()=>{
   runBtn.disabled = false; dlCsvBtn.disabled = false; dlXlsxBtn.disabled = false;
 });
 
-// --- OCR（進捗％表示 & エラーハンドル） ---
+// --- OCR（進捗表示つき）---
 async function ocrImageDataURL(dataUrl, label=''){
   progress.textContent = `${label} をOCR開始…`;
   try {
@@ -147,38 +148,7 @@ async function ocrImageDataURL(dataUrl, label=''){
   }
 }
 
-  progress.textContent = `${label} をOCR準備中…`;
-  try{
-    const res = await Tesseract.recognize(dataUrl, 'jpn', {
-      logger: m => {
-        if (m.status && typeof m.progress === 'number'){
-          const pct = Math.round(m.progress * 100);
-          progress.textContent = `${label} をOCR中… ${pct}%`;
-        } else if (m.status){
-          progress.textContent = `${label}：${m.status}`;
-        }
-      }
-    });
-    let txt = (res?.data?.text || '').trim();
-    if (!txt){
-      const res2 = await Tesseract.recognize(dataUrl, 'eng', {
-        logger: m => {
-          if (m.status && typeof m.progress === 'number'){
-            const pct = Math.round(m.progress * 100);
-            progress.textContent = `${label}（英数フォールバック）… ${pct}%`;
-          }
-        }
-      });
-      txt = (res2?.data?.text || '').trim();
-    }
-    return txt.replace(/\r?\n/g, '\n');
-  } catch (e){
-    console.error(e);
-    progress.textContent = `OCRエラー：${e?.message || e}`;
-    return '';
-  }
-}
-
+// --- ユーティリティ ---
 function fileToDataURL(f){
   return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
 }
@@ -230,7 +200,7 @@ function renderTable(rows){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-// ダウンロード
+// CSV/XLSX ダウンロード
 dlCsvBtn.addEventListener('click', ()=>{
   const header = ['raw','normalized','matched_master','score','method'];
   const lines = [header.join(',')].concat(
@@ -254,4 +224,3 @@ function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
 }
-
