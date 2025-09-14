@@ -1,5 +1,21 @@
 // app.js — 完全版（Illegal return対策済み）
 import { normalizeName } from './normalize.js';
+// pdf.js を未読込なら動的に読み込む
+async function ensurePdfJs(){
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.min.js';
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  if (!window.pdfjsLib) throw new Error('failed to load pdf.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://unpkg.com/pdfjs-dist@4.3.136/build/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
 
 const fileInput  = document.getElementById('fileInput');
 const masterInput= document.getElementById('masterInput');
@@ -62,7 +78,9 @@ runBtn.addEventListener('click', async ()=>{
     if ((f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf')){
       progress.textContent = `${f.name} を読み込み中…`;
       const arrbuf = await f.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrbuf }).promise;
+const pdfjs = await ensurePdfJs(); // ここでpdf.jsをロードして取得
+const pdf = await pdfjs.getDocument({ data: arrbuf }).promise;
+
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
         const viewport = page.getViewport({ scale: 2.0 });
@@ -224,3 +242,4 @@ function dateStamp(){
   const d=new Date(), z=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`;
 }
+
