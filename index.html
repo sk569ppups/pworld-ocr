@@ -2,238 +2,91 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>P-WORLD 機種抽出 OCRツール</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- pdf.js & Tesseract.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.js"></script>
+  <title>機種リストOCR抽出ツール</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
-    section { margin-bottom: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    th, td { border: 1px solid #999; padding: 4px; font-size: 14px; }
-    th { background: #eee; }
-    .btn { margin: 5px; padding: 6px 12px; }
-    #progress { margin-top: 10px; color: blue; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0b1220;
+      color: #e6f0ff;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .controls input[type="file"] {
+      padding: 6px;
+      background: #0e1630;
+      border: 1px solid #1e2a4a;
+      border-radius: 8px;
+      color: #e6f0ff;
+    }
+    .controls button {
+      background: #2b66ff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #progress {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: .8;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid #1e2a4a;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #101a33;
+      position: sticky;
+      top: 0;
+    }
   </style>
 </head>
 <body>
-  <main>
-    <h2>P-WORLD 機種抽出（画像/PDF → OCR → CSV/XLSX）</h2>
+  <h1>機種リスト OCR 抽出ツール</h1>
 
-    <section>
-      <label>店舗名: <input type="text" id="store" value="コトブキプラス鹿浜店"></label>
-      <label>店グループ: <input type="text" id="group" value="自店"></label>
-      <label>取得日: <input type="date" id="capture-date"></label>
-    </section>
+  <section class="controls">
+    <label>
+      PDF/画像ファイルを選択:
+      <input id="fileInput" type="file" multiple accept=".pdf,image/*" />
+    </label>
+    <button id="runBtn">OCR 実行</button>
+    <button id="dlCsvBtn" disabled>CSV ダウンロード</button>
+    <button id="dlXlsxBtn" disabled>Excel(xlsx) ダウンロード</button>
+  </section>
 
-    <section>
-      <p>画像またはPDFをアップロードしてください:</p>
-      <input type="file" id="fileInput" multiple>
-      <p>マスターCSV（任意）:</p>
-      <input type="file" id="masterInput" accept=".csv">
-    </section>
+  <div id="progress"></div>
 
-    <section>
-      <button id="runBtn" class="btn">OCR 実行</button>
-      <button id="dlCsvBtn" class="btn" disabled>CSV ダウンロード</button>
-      <button id="dlXlsxBtn" class="btn" disabled>Excel(xlsx) ダウンロード</button>
-    </section>
+  <table id="resultTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>抽出テキスト</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-    <section id="progress">待機中...</section>
-
-    <section class="tablewrap">
-      <table id="resultTable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>raw (OCR)</th>
-            <th>normalized (整形)</th>
-            <th>matched_master</th>
-            <th>score</th>
-            <th>method</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </main>
-
-  <footer>
-    <p class="small">※ アップロードされた画像/PDFはサーバへ送信されず、ブラウザ内のみで処理されます。</p>
-  </footer>
-
-  <!-- ====== OCRスクリプト本体 ====== -->
-  <script>
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
-  }
-
-  async function pdfToImages(file) {
-    const arrBuf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrBuf }).promise;
-    const imgs = [];
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2.0 });
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
-      imgs.push(new File([blob], `page_${p}.png`, { type: 'image/png' }));
-    }
-    return imgs;
-  }
-
-  function normalizeName(s) {
-    if (!s) return "";
-    const map = { "Ａ":"A","Ｂ":"B","Ｃ":"C","Ｄ":"D","Ｅ":"E","Ｆ":"F","Ｇ":"G","Ｈ":"H","Ｉ":"I","Ｊ":"J","Ｋ":"K","Ｌ":"L","Ｍ":"M","Ｎ":"N","Ｏ":"O","Ｐ":"P","Ｑ":"Q","Ｒ":"R","Ｓ":"S","Ｔ":"T","Ｕ":"U","Ｖ":"V","Ｗ":"W","Ｘ":"X","Ｙ":"Y","Ｚ":"Z",
-      "ａ":"a","ｂ":"b","ｃ":"c","ｄ":"d","ｅ":"e","ｆ":"f","ｇ":"g","ｈ":"h","ｉ":"i","ｊ":"j","ｋ":"k","ｌ":"l","ｍ":"m","ｎ":"n","ｏ":"o","ｐ":"p","ｑ":"q","ｒ":"r","ｓ":"s","ｔ":"t","ｕ":"u","ｖ":"v","ｗ":"w","ｘ":"x","ｙ":"y","ｚ":"z",
-      "０":"0","１":"1","２":"2","３":"3","４":"4","５":"5","６":"6","７":"7","８":"8","９":"9",
-      "－":"-","ー":"-","―":"-","‐":"-","ｰ":"-","　":" " };
-    s = s.replace(/./g, ch => map[ch] ?? ch).replace(/\s+/g, " ").trim();
-    return s;
-  }
-
-  function parseMasterCsv(text) {
-    const rows = text.split(/\r?\n/).map(l => l.split(",").map(s => s.trim())).filter(r => r.length && r[0]);
-    const map = new Map();
-    for (const r of rows) {
-      const canonical = normalizeName(r[0]);
-      if (!map.has(canonical)) map.set(canonical, new Set([canonical]));
-      for (let i = 1; i < r.length; i++) {
-        const alias = normalizeName(r[i]); if (alias) map.get(canonical).add(alias);
-      }
-    }
-    return map;
-  }
-
-  function matchToMaster(items, masterMap) {
-    if (!masterMap) return items.map(it => ({ ...it, matched_master: "", score: "" }));
-    const out = [];
-    for (const it of items) {
-      let best=null, bestScore=0;
-      for (const [canon, aliases] of masterMap.entries()) {
-        for (const alias of aliases) {
-          let score=0;
-          if (it.normalized === alias) score=1;
-          else if (it.normalized.includes(alias) || alias.includes(it.normalized)) score=0.7;
-          if (score > bestScore) { bestScore=score; best=canon; }
-        }
-      }
-      out.push({ ...it, matched_master: best ?? "", score: best ? bestScore.toFixed(2) : "" });
-    }
-    return out;
-  }
-
-  async function runOCR_onFiles(files, { lang="jpn+eng", psm=6 } = {}) {
-    const { createWorker } = Tesseract;
-    const worker = await createWorker({ logger: m => console.log(m) });
-    await worker.loadLanguage(lang); await worker.initialize(lang);
-    await worker.setParameters({ tessedit_pageseg_mode: String(psm) });
-
-    const results = [];
-    for (const f of files) {
-      const { data } = await worker.recognize(f);
-      const lines = (data.text||"").split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
-      for (const ln of lines) if (ln.length>=3) results.push({ raw: ln, normalized: normalizeName(ln) });
-    }
-    await worker.terminate();
-    return results;
-  }
-
-  const btnRun = document.getElementById('runBtn');
-  const btnCsv = document.getElementById('dlCsvBtn');
-  const btnXlsx = document.getElementById('dlXlsxBtn');
-  const tbody = document.querySelector("#resultTable tbody");
-  const progressEl = document.getElementById('progress');
-  let rows = [];
-
-  function renderRows(rs) {
-    tbody.innerHTML="";
-    rs.forEach((r,i)=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${i+1}</td><td>${r.raw}</td><td>${r.normalized}</td><td>${r.matched_master||""}</td><td>${r.score||""}</td><td>tesseract</td>`;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function toCSV(rs){
-    const header=["date","store","group","raw","normalized","matched_master","score","method"];
-    const lines=[header.join(",")].concat(rs.map(r=>header.map(h=>r[h]??"").join(",")));
-    return lines.join("\r\n");
-  }
-  function download(filename, blob){
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=filename; a.click(); URL.revokeObjectURL(a.href);
-  }
-
-  btnRun.addEventListener('click', async ()=>{
-    try{
-      const fileInput=document.getElementById('fileInput');
-      if(!fileInput.files.length){ alert("ファイルを選択してください"); return; }
-      let images=[];
-      for(const f of fileInput.files){
-        if(f.type==="application/pdf"||f.name.toLowerCase().endsWith(".pdf")){
-          const pages=await pdfToImages(f); images.push(...pages);
-        } else images.push(f);
-      }
-      progressEl.textContent="OCR実行中...";
-      const ocrItems=await runOCR_onFiles(images);
-
-      let masterMap=null;
-      const mInput=document.getElementById('masterInput');
-      if(mInput.files.length){
-        const text=await mInput.files[0].text();
-        masterMap=parseMasterCsv(text);
-      }
-      const store=document.getElementById('store').value;
-      const group=document.getElementById('group').value;
-      const ymd=document.getElementById('capture-date').value;
-
-      const matched=matchToMaster(ocrItems, masterMap);
-      rows = matched.map(r=>({date:ymd,store,group,raw:r.raw,normalized:r.normalized,
-        matched_master:r.matched_master,score:r.score,method:"tesseract"}));
-      renderRows(matched);
-      progressEl.textContent=`抽出：${rows.length}件`;
-
-      btnCsv.disabled=rows.length===0;
-      btnXlsx.disabled=rows.length===0;
-    }catch(e){ console.error(e); progressEl.textContent="エラー"; alert("OCR中にエラー"); }
-  });
-
-  btnCsv.addEventListener('click', ()=>{
-    const csv=toCSV(rows);
-    download(`ocr_${Date.now()}.csv`, new Blob([csv],{type:'text/csv'}));
-  });
-  btnXlsx.addEventListener('click', ()=>{
-    const csv=toCSV(rows);
-    download(`ocr_${Date.now()}.xlsx.csv`, new Blob([csv],{type:'text/csv'}));
-  });
-  <!-- ① OCR本体（固定バージョン） -->
-<script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
-
-<!-- ② PDF → 画像化（PDF対応する場合） -->
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js"></script>
-<script defer>
-  // pdf.js のワーカー（必須）
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js";
-  }
-</script>
-
-<!-- ③ XLSX 出力 -->
-<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
-
-
