@@ -23,51 +23,51 @@
   <script defer src="./app.js"></script>
 </head>
 <body>
-  <header class="hdr">
-    <h1>P-WORLD 機種抽出ツール <span class="tag">画像/PDF → OCR → CSV/XLSX</span></h1>
-  </header>
+ <!-- Tesseract.js -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+<!-- xlsx (Excel出力用) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <main class="container">
-    <section class="card">
-      <div class="row">
-        <label class="lbl">
-          <span>画像またはPDF</span>
-          <input id="imageInput" type="file" accept="image/*,application/pdf" />
-        </label>
-        <label class="lbl">
-          <span>（任意）マスターCSV（1列目：機種名）</span>
-          <input id="masterCsvInput" type="file" accept=".csv" />
-        </label>
-        <div class="actions">
-          <button id="btnRunOCR">OCR 実行</button>
-          <button id="btnCsv"   class="sub" disabled>CSV ダウンロード</button>
-          <button id="btnXlsx"  class="sub" disabled>Excel(xlsx) ダウンロード</button>
-        </div>
-      </div>
+<!-- PDF.js をCDNから読み込み -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
+</script>
 
-      <div class="row status">
-        <div>ステータス：<span id="statusText">待機中</span></div>
-        <progress id="progress" value="0" max="1"></progress>
-        <div><span id="progressText">0%</span></div>
-        <div class="hint">※アップロードしたファイルはサーバー送信されず、ブラウザ内のみで処理されます。</div>
-      </div>
-    </section>
+<!-- 自作JS -->
+<script defer src="./ass.js"></script>
+<script defer src="./normalize.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<header class="hdr">
+  <h1>P-WORLD 機種抽出ツール <span class="tag">画像/PDF + OCR + CSV/XLSX</span></h1>
+</header>
 
-    <section class="card">
-      <table class="grid">
-        <thead>
-          <tr>
-            <th style="width:56px;">#</th>
-            <th>raw（OCR）</th>
-            <th>normalized（整形）</th>
-            <th>matched_master</th>
-            <th style="width:80px;">score</th>
-            <th style="width:96px;">method</th>
-          </tr>
-        </thead>
-        <tbody id="resultBody"></tbody>
-      </table>
-    </section>
-  </main>
+<main class="container">
+  <section class="card">
+    <div class="row">
+      <label class="lbl">
+        画像またはPDF
+        <input id="input-file" type="file" accept="image/*,application/pdf" />
+      </label>
+    </div>
+    <div class="row">
+      <label class="lbl">
+        （任意）マスターCSV（1列目：機種名）
+        <input id="masterCsvInput" type="file" accept=".csv" />
+      </label>
+    </div>
+    <div class="actions">
+      <!-- id を btn-ocr に変更 -->
+      <button id="btn-ocr">OCR 実行</button>
+      <button id="btnCsv" class="sub" disabled>CSV ダウンロード</button>
+      <button id="btnXlsx" class="sub" disabled>Excel(xlsx) ダウンロード</button>
+    </div>
+  </section>
+</main>
+
 </body>
 </html>
+
