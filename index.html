@@ -2,88 +2,34 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>機種リストOCR抽出ツール</title>
+  <title>機種リストOCR抽出ツール（シンプル版）</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      background: #0b1220;
-      color: #e6f0ff;
-      margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      font-size: 20px;
-      margin-bottom: 12px;
-    }
-    .controls {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .controls input[type="file"] {
-      padding: 6px;
-      background: #0e1630;
-      border: 1px solid #1e2a4a;
-      border-radius: 8px;
-      color: #e6f0ff;
-    }
-    .controls button {
-      background: #2b66ff;
-      border: none;
-      padding: 8px 14px;
-      border-radius: 8px;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    #progress {
-      margin-top: 8px;
-      font-size: 14px;
-      opacity: .8;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 16px;
-      font-size: 13px;
-    }
-    th, td {
-      border-bottom: 1px solid #1e2a4a;
-      padding: 6px 8px;
-      text-align: left;
-    }
-    th {
-      background: #101a33;
-      position: sticky;
-      top: 0;
-    }
+    body { font-family: system-ui,sans-serif; background:#0b1220; color:#e6f0ff; margin:0; padding:20px; }
+    h1 { font-size:20px; margin-bottom:12px; }
+    .controls { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .controls input[type="file"] { padding:6px; background:#0e1630; border:1px solid #1e2a4a; border-radius:8px; color:#e6f0ff; }
+    .controls button { background:#2b66ff; border:none; padding:8px 14px; border-radius:8px; color:#fff; font-weight:600; cursor:pointer; }
+    #progress { margin-top:8px; font-size:14px; opacity:.8; }
+    table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
+    th,td { border-bottom:1px solid #1e2a4a; padding:6px 8px; text-align:left; }
+    th { background:#101a33; position:sticky; top:0; }
   </style>
 </head>
 <body>
-  <h1>機種リスト OCR 抽出ツール</h1>
+  <h1>機種リスト OCR 抽出ツール（シンプル版）</h1>
 
   <section class="controls">
-    <label>
-      PDF/画像ファイルを選択:
-      <input id="fileInput" type="file" multiple accept=".pdf,image/*" />
-    </label>
+    <input id="fileInput" type="file" multiple accept=".pdf,image/*" />
     <button id="runBtn">OCR 実行</button>
-    <button id="dlCsvBtn" disabled>CSV ダウンロード</button>
     <button id="dlXlsxBtn" disabled>Excel(xlsx) ダウンロード</button>
   </section>
 
   <div id="progress"></div>
 
   <table id="resultTable">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>抽出テキスト</th>
-      </tr>
-    </thead>
+    <thead><tr><th>#</th><th>機種名</th></tr></thead>
     <tbody></tbody>
   </table>
 
