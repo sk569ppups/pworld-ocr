@@ -56,6 +56,22 @@ document.addEventListener("DOMContentLoaded", () => {
       return m[0]?.replace(/^"(.*)"$/, '$1') ?? '';
     });
   }
+// PDF.js が未定義ならCDNから動的に読み込む保険
+async function ensurePdfJsLoaded() {
+  if (window.pdfjsLib) return; // 既にあれば何もしない
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("pdf.min.js load failed"));
+    document.head.appendChild(s);
+  });
+  // worker の場所を明示（相対パス事故を防止）
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
+  }
+}
 
   /* ===== マッチング ===== */
   function lev(a,b){
@@ -372,5 +388,6 @@ async function runOCR() {
     if (statusEl) statusEl.textContent = "エラー発生";
   }
 }
+
 
 
