@@ -1,4 +1,22 @@
-// app.js
+// --- app.js の冒頭に追加 ---
+function $(sel){ return document.querySelector(sel); }
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = $("#btn-ocr");
+  if (btn && !btn._wired) {
+    btn._wired = true;
+    btn.addEventListener("click", () => {
+      console.log("[OCR] click");
+      // ここでOCR処理を呼び出す関数を実行
+      if (typeof runOCR === "function") {
+        console.log("[OCR] start");
+        runOCR();
+      } else {
+        console.warn("runOCR が未定義です");
+      }
+    });
+  }
+});
 (() => {
   const $ = s => document.querySelector(s);
   const $img = $('#imageInput');
@@ -281,3 +299,4 @@
     }
   });
 })();
+
