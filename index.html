@@ -217,5 +217,163 @@
     download(`ocr_${Date.now()}.xlsx.csv`, new Blob([csv],{type:'text/csv'}));
   });
   </script>
+  <!-- Tesseract.js 本体は defer で先に読み込ませる（順序重要） -->
+<script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+
+<script defer>
+(() => {
+  // ====== DOM取得（あなたのID名に合わせて必要なら変更） ======
+  const $ = s => document.querySelector(s);
+  const fileInput = $('#imageInput');       // 画像/PDFの <input type="file"> のID
+  const runBtn    = $('#btnRunOCR');        // 「OCR実行」ボタンのID
+  const progBar   = $('#progress');         // <progress> か 数値表示用 <span>
+  const progText  = $('#progressText');     // 進捗%を出す <span>
+  const statusEl  = $('#statusText');       // 「OCR実行中…」などのステータス表示
+  const tbody     = $('#resultBody');       // 結果テーブルの <tbody>
+
+  // ====== 進捗表示の初期化 ======
+  function resetUI(msg='') {
+    if (progBar)  progBar.value = 0;
+    if (progText) progText.textContent = '0%';
+    if (statusEl) statusEl.textContent = msg;
+    if (tbody)    tbody.innerHTML = '';
+  }
+
+  // ====== Tesseract パス（絶対URL固定） ======
+  const PATHS_PRIMARY = {
+    workerPath: 'https://unpkg.com/tesseract.js-core@5.0.2/worker.min.js',
+    corePath:   'https://unpkg.com/tesseract.js-core@5.0.2/tesseract-core.wasm.js',
+    langPath:   'https://tessdata.projectnaptha.com/5', // jpn/eng の学習データ置き場
+  };
+  const PATHS_FALLBACK = {
+    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.2/worker.min.js',
+    corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.2/tesseract-core.wasm.js',
+    langPath:   'https://tessdata.projectnaptha.com/5',
+  };
+
+  // ====== 画像 → OCR 実行 ======
+  async function ocrImageBlob(blob) {
+    // ログをコンソールへ（進捗％を拾うため必須）
+    Tesseract.setLogging(true);
+
+    let lastErr;
+    for (const PATHS of [PATHS_PRIMARY, PATHS_FALLBACK]) {
+      try {
+        const worker = await Tesseract.createWorker({
+          workerPath: PATHS.workerPath,
+          corePath:   PATHS.corePath,
+          langPath:   PATHS.langPath,
+          logger: m => {
+            if (m.status && statusEl) statusEl.textContent = m.status;
+            if (typeof m.progress === 'number') {
+              if (progBar)  progBar.value = m.progress;
+              if (progText) progText.textContent = Math.round(m.progress * 100) + '%';
+            }
+            // デバッグは必要に応じて
+            // console.log(m);
+          }
+        });
+
+        await worker.loadLanguage('jpn+eng');
+        await worker.initialize('jpn+eng');
+
+        // 画像の自動回転もON
+        const { data } = await worker.recognize(blob, { rotateAuto: true });
+        await worker.terminate();
+        return data.text || '';
+      } catch (e) {
+        lastErr = e;
+        // 次のCDNへフォールバック
+      }
+    }
+    throw lastErr || new Error('OCR初期化に失敗しました');
+  }
+
+  // ====== 画像/PDF -> 画像化（PDF対応していないなら画像のみでOK） ======
+  async function fileToImageBlob(file) {
+    // 画像ならそのまま
+    if (/^image\//.test(file.type)) {
+      return file;
+    }
+    // PDF対応を入れていない場合はここで弾く
+    throw new Error('PDFは未対応です。画像（PNG/JPG）を選択してください。');
+  }
+
+  // ====== 結果をテーブルへ反映（最低限・rawのみ） ======
+  function renderResultLines(text) {
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    lines.forEach((line, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td>${escapeHtml(line)}</td>
+        <td></td><td></td><td></td><td></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ====== ボタン活性制御 ======
+  function updateRunButton() {
+    runBtn && (runBtn.disabled = !fileInput || !fileInput.files || fileInput.files.length === 0);
+  }
+
+  fileInput && fileInput.addEventListener('change', () => {
+    resetUI('');
+    updateRunButton();
+  });
+
+  runBtn && runBtn.addEventListener('click', async () => {
+    updateRunButton();
+    resetUI('準備中…');
+
+    const f = fileInput?.files?.[0];
+    if (!f) { statusEl && (statusEl.textContent = 'ファイルが選択されていません'); return; }
+
+    runBtn.disabled = true;
+
+    // 60秒ウォッチドッグ（何も進まない時の気づき用）
+    let watchdog = setTimeout(() => {
+      if (statusEl && (!progBar || progBar.value === 0)) {
+        statusEl.textContent = '読み込みが進みません。ネットワーク/社内フィルタでCDNがブロックされている可能性があります（unpkg→jsDelivrへの自動切替済）。';
+      }
+    }, 60000);
+
+    try {
+      statusEl && (statusEl.textContent = '画像準備中…');
+      const blob = await fileToImageBlob(f);
+
+      statusEl && (statusEl.textContent = 'OCR実行中…');
+      const text  = await ocrImageBlob(blob);
+
+      statusEl && (statusEl.textContent = '完了');
+      renderResultLines(text || '(テキストなし)');
+    } catch (err) {
+      console.error(err);
+      statusEl && (statusEl.textContent = 'エラー');
+      if (tbody) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="6" style="color:#c00;">${escapeHtml(String(err?.message || err))}</td>`;
+        tbody.appendChild(tr);
+      }
+    } finally {
+      clearTimeout(watchdog);
+      runBtn.disabled = false;
+    }
+  });
+
+  // 初期状態
+  updateRunButton();
+  resetUI('');
+})();
+</script>
+
 </body>
 </html>
+
