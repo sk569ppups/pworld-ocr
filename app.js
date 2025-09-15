@@ -299,4 +299,78 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 })();
+// --- OCR処理本体 ---
+async function runOCR() {
+  const fileInput = document.querySelector("#input-file");
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    alert("ファイルを選択してください");
+    return;
+  }
+
+  const statusEl = document.querySelector("#status");
+  const progressEl = document.querySelector("#progress");
+
+  function updateProgress(p, status) {
+    const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+    if (statusEl) statusEl.textContent = `ステータス：${status}`;
+    if (progressEl) progressEl.textContent = `${pct}%`;
+  }
+
+  try {
+    updateProgress(0, "初期化中…");
+
+    // Tesseractワーカー作成
+    const worker = await Tesseract.createWorker({
+      logger: m => {
+        if (m.progress != null) {
+          updateProgress(m.progress, m.status || "");
+        }
+      },
+      workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js",
+      corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.2/tesseract-core.wasm.js",
+      langPath:   "https://tessdata.projectnaptha.com/4.0.0"
+    });
+    await worker.loadLanguage("jpn");
+    await worker.initialize("jpn");
+
+    let text = "";
+
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      updateProgress(0.02, "PDFを画像化中…");
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const { data } = await worker.recognize(canvas);
+        text += "\n" + data.text;
+      }
+    } else {
+      // 画像ファイルの場合
+      const { data } = await worker.recognize(file);
+      text = data.text;
+    }
+
+    updateProgress(1, "完了");
+    console.log("OCR結果:", text);
+
+    // TODO: CSV/XLSX 変換処理に渡す
+    const resultArea = document.querySelector("#result-area");
+    if (resultArea) {
+      resultArea.textContent = text.slice(0, 500); // とりあえず先頭500文字表示
+    }
+
+    await worker.terminate();
+  } catch (e) {
+    console.error(e);
+    if (statusEl) statusEl.textContent = "エラー発生";
+  }
+}
+
 
