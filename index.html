@@ -4,70 +4,66 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>P-WORLD 機種抽出（画像/PDF→OCR→CSV/XLSX）</title>
-  <link rel="stylesheet" href="./styles.css">
-  <!-- Tesseract.js（固定バージョン） -->
-  <script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
-  <!-- XLSX（Excel出力） -->
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css" />
 
-  <!-- pdf.js を ES Module として読み込み、window に公開（※あなたの libs を使用） -->
-  <script type="module">
-    import * as pdfjsLib from './libs/pdf.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.mjs';
-    window.pdfjsLib = pdfjsLib;
+  <!-- ===== ライブラリ（CDN固定） ===== -->
+  <!-- Tesseract.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- xlsx (Excel出力用) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- PDF.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js"></script>
+  <script>
+    // PDF.js ワーカーの場所（相対パス事故を防ぐ）
+    window.addEventListener("DOMContentLoaded", () => {
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
+      }
+    });
   </script>
 
-  <!-- 自作JS（順序重要：ass → normalize → app） -->
-  <script defer src="./ass.js"></script>
-  <script defer src="./normalize.js"></script>
-  <script defer src="./app.js"></script>
+  <!-- ===== 自作JS（順序重要） ===== -->
+  <script defer src="./ass.js?v=20250915a"></script>
+  <script defer src="./normalize.js?v=20250915a"></script>
+  <script defer src="./app.js?v=20250915a"></script>
 </head>
 <body>
- <!-- Tesseract.js -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-<!-- xlsx (Excel出力用) -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <header class="hdr">
+    <h1>P-WORLD 機種抽出ツール <span class="tag">画像/PDF + OCR + CSV/XLSX</span></h1>
+  </header>
 
-<!-- PDF.js をCDNから読み込み -->
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js"></script>
-<script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
-</script>
+  <main class="container">
+    <section class="card">
+      <div class="row">
+        <label class="lbl">
+          画像またはPDF
+          <input id="input-file" type="file" accept="image/*,application/pdf" />
+        </label>
+      </div>
+      <div class="row">
+        <label class="lbl">
+          （任意）マスターCSV（1列目：機種名）
+          <input id="masterCsvInput" type="file" accept=".csv" />
+        </label>
+      </div>
 
-<!-- 自作JS -->
-<script defer src="./ass.js"></script>
-<script defer src="./normalize.js"></script>
-<script defer src="./app.js"></script>
-</head>
-<body>
-<header class="hdr">
-  <h1>P-WORLD 機種抽出ツール <span class="tag">画像/PDF + OCR + CSV/XLSX</span></h1>
-</header>
+      <div class="actions">
+        <button id="btn-ocr">OCR 実行</button>
+        <button id="btnCsv" class="sub" disabled>CSV ダウンロード</button>
+        <button id="btnXlsx" class="sub" disabled>Excel(xlsx) ダウンロード</button>
+      </div>
 
-<main class="container">
-  <section class="card">
-    <div class="row">
-      <label class="lbl">
-        画像またはPDF
-        <input id="input-file" type="file" accept="image/*,application/pdf" />
-      </label>
-    </div>
-    <div class="row">
-      <label class="lbl">
-        （任意）マスターCSV（1列目：機種名）
-        <input id="masterCsvInput" type="file" accept=".csv" />
-      </label>
-    </div>
-    <div class="actions">
-      <!-- id を btn-ocr に変更 -->
-      <button id="btn-ocr">OCR 実行</button>
-      <button id="btnCsv" class="sub" disabled>CSV ダウンロード</button>
-      <button id="btnXlsx" class="sub" disabled>Excel(xlsx) ダウンロード</button>
-    </div>
-  </section>
-</main>
+      <!-- 進捗UI（app.js から参照される要素） -->
+      <div class="row" style="margin-top:8px">
+        <span id="status">ステータス：待機中</span>
+        <span style="margin-left:12px" id="progress">0%</span>
+      </div>
+    </section>
 
+    <!-- 結果テーブルの入れ物（任意） -->
+    <section class="card" id="result-area"></section>
+  </main>
 </body>
 </html>
-
