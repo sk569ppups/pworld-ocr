@@ -1,41 +1,65 @@
-// normalize.js
+(function(){
+const ZEN2HAN_MAP = {
+'－':'-','ー':'-','‐':'-','―':'-','–':'-','—':'-',
+'：':':','／':'/','（':'(','）':')','　':' ',
+};
+
+
+function toHalfWidth(str){
+return str.replace(/[！-～]/g, s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0))
+.replace(/[％]/g,'%');
+}
+
+
+function replaceCommon(str){
+return str.replace(/[\u2010-\u2015]/g,'-')
+.replace(/[\u2212]/g,'-')
+.replace(/[\u3000]/g,' ')
+.replace(/[≪≫〈〉「」『』【】]/g,'')
+.replace(/[™®©]/g,'');
+}
+
+
+function mapChars(str){
+return str.replace(/[－ー‐―–—：／（）　]/g, ch => ZEN2HAN_MAP[ch] || ch);
+}
+
+
+function cleanSpaces(str){
+return str.replace(/\s+/g,' ').trim();
+}
+
+
+function katakanaNormalize(str){
+// 小書き・長音のゆれをある程度吸収
+return str
+.replace(/[ァィゥェォャュョヮ]/g, m => ({'ァ':'ア','ィ':'イ','ゥ':'ウ','ェ':'エ','ォ':'オ','ャ':'ヤ','ュ':'ユ','ョ':'ヨ','ヮ':'ワ'}[m]||m))
+.replace(/ｯ/g,'ツ')
+.replace(/ヵ/g,'カ').replace(/ヶ/g,'ケ');
+}
+
+
 function normalizeName(s){
-  if (!s) return '';
-  let t = String(s);
-
-  t = t
-    .replace(/[●■□◆◇★☆◎〇◯○•‣・]/g, ' ')    // 箇条書き記号 → 空白
-    .replace(/[‐－ー–—─━]/g, '-')              // ダッシュ統一
-    .replace(/\u3000/g, ' ')                    // 全角スペース → 半角
-    .replace(/[（）［］【】〔〕]/g, m => ({'（':'(', '）':')','［':'[','］':']','【':'[','】':']','〔':'[','〕':']'}[m]))
-    .replace(/[：﹕∶]/g, ':')                   // コロン統一
-    .replace(/ver\.?/gi, ' ver.');
-
-  // 全角英数記号 → 半角
-  t = t.replace(/[Ａ-Ｚａ-ｚ０-９！-／：-＠［-｀｛-～]/g, ch =>
-    String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
-  );
-
-  // PF/PA/P/e のゆらぎ補正
-  t = t
-    .replace(/\bpf\b/gi, 'PF')
-    .replace(/\bpa\b/gi, 'PA')
-    .replace(/\bp\b(?![a-z])/gi, 'P')
-    .replace(/\be\b(?![a-z])/gi, 'e');
-
-  t = t.replace(/^\s*[-・.]/, '').replace(/\s{2,}/g, ' ').trim();
-  t = t.replace(/[,.;:]+$/, '').trim();
-  return t;
+if(!s) return '';
+let out = s;
+out = toHalfWidth(out);
+out = replaceCommon(out);
+out = mapChars(out);
+out = cleanSpaces(out);
+out = katakanaNormalize(out);
+// 記号の削減（アルファ数値・かなカナ・漢字・記号一部のみ）
+out = out.replace(/[^0-9A-Za-zぁ-んァ-ン一-龥\-\(\)・\s]/g,'');
+// 連続ハイフンを1つに
+out = out.replace(/\-+/g,'-');
+return out;
 }
 
-function isNoiseLine(s){
-  if (!s) return true;
-  if (s.length <= 1) return true;
-  if (!/[0-9A-Za-z\u3040-\u30FF\u4E00-\u9FFF]/.test(s)) return true; // 記号だけ
-  return false;
+
+// より粗い比較用のキー（空白と記号を除去）
+function makeLooseKey(s){
+return normalizeName(s).replace(/[\s\-・()]/g,'').toLowerCase();
 }
 
-if (typeof window !== 'undefined') {
-  window.normalizeName = normalizeName;
-  window.isNoiseLine   = isNoiseLine;
-}
+
+window.NameNormalizer = { normalizeName, makeLooseKey };
+})();
