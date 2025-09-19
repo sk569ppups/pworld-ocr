@@ -1,58 +1,69 @@
-(function(){
-async function extractTextFromPdf(file, forceOcr=false){
-const pdfjsLib = window.__pdfjsLib;
-const buf = await file.arrayBuffer();
-try{
-const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-let all = '';
-for(let p=1;p<=pdf.numPages;p++){
-const page = await pdf.getPage(p);
-const txt = await page.getTextContent();
-const str = txt.items.map(it=>it.str).join('\n');
-all += str + '\n';
+// OCR結果をマスターシートと照合する処理
+async function runOCR() {
+  const fileInput = document.getElementById("pdfFile");
+  const masterInput = document.getElementById("masterFile");
+
+  if (!fileInput.files[0] || !masterInput.files[0]) {
+    alert("PDFファイルとマスターCSVを選択してください");
+    document.getElementById("ocrBtn").disabled = false;
+    return;
+  }
+
+  // OCR処理の準備
+  const { createWorker } = Tesseract;
+  const worker = await createWorker({
+    logger: m => {
+      if (m.status === "recognizing text") {
+        document.getElementById("progress").value = m.progress * 100;
+      }
+    }
+  });
+
+  await worker.loadLanguage("jpn");
+  await worker.initialize("jpn");
+
+  const pdfFile = fileInput.files[0];
+  const { data } = await worker.recognize(pdfFile);
+  await worker.terminate();
+
+  const lines = data.text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // マスターシート読み込み
+  const masterText = await masterInput.files[0].text();
+  const master = masterText.split("\n").map(l => l.trim()).filter(Boolean);
+
+  const uniq = new Set();
+  const matched = new Set();
+  const unmatched = new Set();
+
+  const masterLooseList = master.map(m => NameNormalizer.makeLooseKey(m));
+
+  for (const raw of lines) {
+    const norm = NameNormalizer.normalizeName(raw);
+    const loose = NameNormalizer.makeLooseKey(raw);
+    if (!loose || uniq.has(loose)) {
+      console.warn("重複 or 無効:", raw); // デバッグ用
+      continue;
+    }
+    uniq.add(loose);
+
+    // 照合
+    const idx = masterLooseList.indexOf(loose);
+    if (idx !== -1) {
+      matched.add(master[idx]);
+    } else {
+      unmatched.add(norm);
+    }
+  }
+
+  // Excel出力
+  const ws_data = [
+    ["分類", "機種名"],
+    ...[...matched].map(m => ["マッチ", m]),
+    ...[...unmatched].map(u => ["未登録", u])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "抽出結果");
+  XLSX.writeFile(wb, "pworld_extract.xlsx");
 }
-const cleaned = all.replace(/[\s\n]+/g,'\n').trim();
-if(!forceOcr && cleaned.length>20) return cleaned; // ある程度取れていれば採用
-}catch(e){ /* テキスト抽出失敗 → OCRへ */ }
-
-
-// OCR フォールバック
-const imgBitmaps = await rasterizePdfToImages(buf);
-let ocrText = '';
-for(const bmp of imgBitmaps){
-const res = await Tesseract.recognize(bmp, 'jpn', { logger: m=>console.debug('ocr',m) });
-ocrText += (res.data.text||'') + '\n';
-}
-return ocrText;
-}
-
-
-// PDF→複数画像（bitmap）
-async function rasterizePdfToImages(arrayBuf){
-const pdfjsLib = window.__pdfjsLib;
-const pdf = await pdfjsLib.getDocument({data: arrayBuf}).promise;
-const outputs = [];
-for(let p=1;p<=pdf.numPages;p++){
-const page = await pdf.getPage(p);
-const viewport = page.getViewport({ scale: 2.0 });
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = viewport.width; canvas.height = viewport.height;
-await page.render({ canvasContext: ctx, viewport }).promise;
-const bmp = await createImageBitmap(canvas);
-outputs.push(bmp);
-}
-return outputs;
-}
-
-
-// テキスト→候補行
-function splitCandidates(raw){
-const lines = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-// 長さやノイズでフィルタリング（調整可）
-return lines.filter(s=>s.length>=3);
-}
-
-
-window.PWorldExtractor = { extractTextFromPdf, splitCandidates };
-})();
