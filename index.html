@@ -1,68 +1,74 @@
 <!doctype html>
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace}
-textarea{width:100%;min-height:180px}
-.small{font-size:12px;color:#6b7280}
-.ok{color:#047857}
-.warn{color:#b45309}
-.err{color:#b91c1c}
-</style>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>P-WORLD 機種抽出（画像/PDF→OCR→CSV/XLSX）</title>
+
+  <!-- 見た目は外部CSSに。index内にベタ書きしない -->
+  <link rel="stylesheet" href="./styles.css">
+
+  <!-- ライブラリ（CDN/順序固定）-->
+  <script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- pdf.js はローカルの libs を ESM として読み込み、window に公開 -->
+  <script type="module">
+    import * as pdfjsLib from './libs/pdf.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.mjs';
+    window.pdfjsLib = pdfjsLib;
+  </script>
 </head>
 <body>
-<div class="wrap">
-<h1>P-WORLD 機種抽出（改良版 / マスター参照）</h1>
+  <!-- ====== ここにUIだけ（ボタンやテーブル）。CSSやJSは書かない ====== -->
+  <header class="hdr">
+    <h1>P-WORLD 機種抽出ツール</h1>
+  </header>
 
+  <main class="container">
+    <section class="card">
+      <div class="row">
+        <label class="lbl">
+          <span>画像またはPDF</span>
+          <input id="imageInput" type="file" accept="image/*,application/pdf" />
+        </label>
+        <label class="lbl">
+          <span>（任意）マスターCSV（1列目：機種名）</span>
+          <input id="masterCsvInput" type="file" accept=".csv" />
+        </label>
+        <div class="actions">
+          <button id="btnRunOCR">OCR 実行</button>
+          <button id="btnCsv"  class="sub" disabled>CSV ダウンロード</button>
+          <button id="btnXlsx" class="sub" disabled>Excel(xlsx) ダウンロード</button>
+        </div>
+      </div>
+      <div class="row status">
+        <div>ステータス：<span id="statusText">待機中</span></div>
+        <progress id="progress" value="0" max="1"></progress>
+        <div><span id="progressText">0%</span></div>
+      </div>
+    </section>
 
-<div class="grid">
-<div class="card">
-<h2>① PDF / 画像の読み込み</h2>
-<div class="row">
-<input id="pdfInput" type="file" accept="application/pdf,image/*" multiple />
-<label><input id="forceOcr" type="checkbox"/> 強制OCR（PDFにテキストが埋まっていない場合のみ通常ON）</label>
-</div>
-<p class="small">PDFはまず <b>テキスト抽出</b> を試み、空の場合のみ <b>OCR（Tesseract）</b> に自動フォールバックします。</p>
-</div>
+    <section class="card">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:56px;">#</th>
+            <th>raw（OCR）</th>
+            <th>normalized（整形）</th>
+            <th>matched_master</th>
+            <th style="width:80px;">score</th>
+            <th style="width:96px;">method</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </section>
+  </main>
 
-
-<div class="card">
-<h2>② マスターシート読み込み</h2>
-<div class="row">
-<input id="msInput" type="file" accept=".csv,.txt" />
-<button id="btnFetchMs" type="button">./data/master.csv を読み込む</button>
-<input id="msUrl" type="url" placeholder="任意のCSV URL（同一リポ推奨）" style="flex:1"/>
-<button id="btnFetchMsUrl" type="button">URLから読み込み</button>
-</div>
-<p class="small">推奨：リポ内に <code>/data/master.csv</code> を置き、上のボタンで読み込み。<br>CSVは <b>1列目=正式機種名</b>（ヘッダ可）。2列目以降は無視。</p>
-<div id="msStatus" class="small">未読込</div>
-</div>
-
-
-<div class="card">
-<h2>③ 抽出＆照合</h2>
-<div class="row">
-<button id="btnRun" type="button">抽出 → 照合 → 結果表示</button>
-<span id="runStatus" class="small"></span>
-</div>
-<textarea id="rawText" placeholder="抽出テキスト（デバッグ用）" class="mono"></textarea>
-</div>
-
-
-<div class="card">
-<h2>④ 結果</h2>
-<div class="row">
-<button id="btnExportXlsx" type="button">一致リストを XLSX で保存</button>
-<button id="btnExportCsv" type="button">一致リストを CSV で保存</button>
-</div>
-<h3>一致（MSに存在）</h3>
-<textarea id="matched" class="mono"></textarea>
-<h3>未一致（要確認）</h3>
-<textarea id="unmatched" class="mono"></textarea>
-</div>
-</div>
-
-
-<p class="small">ver: ms-refined-2025-09 • 文字整形は normalize.js / 抽出は ass.js / 制御は app.js</p>
-</div>
+  <!-- 自作JS（順序大事：ass → normalize → app） -->
+  <script defer src="./ass.js"></script>
+  <script defer src="./normalize.js"></script>
+  <script defer src="./app.js"></script>
 </body>
 </html>
-*/
