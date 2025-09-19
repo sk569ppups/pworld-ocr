@@ -3,72 +3,49 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>P-WORLD 機種抽出（画像/PDF→OCR→CSV/XLSX）</title>
-
-  <!-- 見た目は外部CSSに。index内にベタ書きしない -->
+  <title>P-WORLD 機種抽出ツール</title>
   <link rel="stylesheet" href="./styles.css">
-
-  <!-- ライブラリ（CDN/順序固定）-->
+  <!-- Tesseract.js -->
   <script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+  <!-- XLSX.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- pdf.js はローカルの libs を ESM として読み込み、window に公開 -->
-  <script type="module">
-    import * as pdfjsLib from './libs/pdf.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.mjs';
-    window.pdfjsLib = pdfjsLib;
-  </script>
+  <!-- 自作スクリプト -->
+  <script defer src="./normalize.js"></script>
+  <script defer src="./ass.js"></script>
+  <script defer src="./app.js"></script>
 </head>
 <body>
-  <!-- ====== ここにUIだけ（ボタンやテーブル）。CSSやJSは書かない ====== -->
-  <header class="hdr">
-    <h1>P-WORLD 機種抽出ツール</h1>
-  </header>
+  <h1>P-WORLD 機種抽出</h1>
 
-  <main class="container">
-    <section class="card">
-      <div class="row">
-        <label class="lbl">
-          <span>画像またはPDF</span>
-          <input id="imageInput" type="file" accept="image/*,application/pdf" />
-        </label>
-        <label class="lbl">
-          <span>（任意）マスターCSV（1列目：機種名）</span>
-          <input id="masterCsvInput" type="file" accept=".csv" />
-        </label>
-        <div class="actions">
-          <button id="btnRunOCR">OCR 実行</button>
-          <button id="btnCsv"  class="sub" disabled>CSV ダウンロード</button>
-          <button id="btnXlsx" class="sub" disabled>Excel(xlsx) ダウンロード</button>
-        </div>
-      </div>
-      <div class="row status">
-        <div>ステータス：<span id="statusText">待機中</span></div>
-        <progress id="progress" value="0" max="1"></progress>
-        <div><span id="progressText">0%</span></div>
-      </div>
-    </section>
+  <label>PDF選択:
+    <input type="file" id="pdfFile" accept="application/pdf">
+  </label>
+  <br>
+  <label>マスターCSV選択:
+    <input type="file" id="masterFile" accept=".csv">
+  </label>
+  <br><br>
 
-    <section class="card">
-      <table class="grid">
-        <thead>
-          <tr>
-            <th style="width:56px;">#</th>
-            <th>raw（OCR）</th>
-            <th>normalized（整形）</th>
-            <th>matched_master</th>
-            <th style="width:80px;">score</th>
-            <th style="width:96px;">method</th>
-          </tr>
-        </thead>
-        <tbody id="resultBody"></tbody>
-      </table>
-    </section>
-  </main>
+  <button id="ocrBtn" onclick="startOCR(); this.disabled=true;">OCR実行</button>
+  <progress id="progress" max="100" value="0"></progress>
+  <p id="status"></p>
 
-  <!-- 自作JS（順序大事：ass → normalize → app） -->
-  <script defer src="./ass.js"></script>
-  <script defer src="./normalize.js"></script>
-  <script defer src="./app.js"></script>
+  <script>
+    async function startOCR() {
+      const progress = document.getElementById("progress");
+      const status = document.getElementById("status");
+      progress.value = 0; // 進捗リセット
+      status.textContent = "OCRを開始しました...";
+
+      try {
+        await runOCR(); // ass.js 側の処理を呼び出し
+        status.textContent = "完了しました！";
+      } catch (err) {
+        console.error(err);
+        status.textContent = "エラーが発生しました";
+        document.getElementById("ocrBtn").disabled = false; // エラー時は再度有効化
+      }
+    }
+  </script>
 </body>
 </html>
