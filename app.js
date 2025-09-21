@@ -148,7 +148,7 @@ const { createWorker } = window.Tesseract || {};
 if (!createWorker) throw new Error("Tesseract.js が読み込まれていません。");
 
 // PDF.js を必ず準備
-await ensurePdfJsLoaded();
+
 
 try {
   // logger は createWorker 側にだけ渡す（recognize には何も渡さない）
@@ -256,4 +256,5 @@ try {
     if (ocrBtn) ocrBtn.disabled = false;
   }
 }
+
 
