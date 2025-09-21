@@ -23,6 +23,21 @@ async function startOCR() {
     if (btn) btn.disabled = false;
   }
 }
+// app.js 上部のユーティリティ付近に置く
+async function ensurePdfJsLoaded() {
+  if (window.pdfjsLib) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("pdf.min.js load failed"));
+    document.head.appendChild(s);
+  });
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
+  }
+}
 
 // ===== メイン処理 =====
 async function runOCR() {
@@ -121,40 +136,73 @@ async function runOCR() {
   }
   if (masterByLoose.size === 0) throw new Error("マスターCSVの有効な行が見つかりません。");
 
-  // ===== OCR 実行 =====
-  const TIMEOUT_MS = 8 * 60 * 1000; // 8分
-  let worker;
-  let ocrText = "";
+ // ===== OCR 実行（安全版） =====
+const TIMEOUT_MS = 8 * 60 * 1000; // 8分
+let worker;
+let ocrText = "";
 
-  setStatus("OCRエンジンを初期化中…");
-  const { createWorker } = window.Tesseract || {};
-  if (!createWorker) throw new Error("Tesseract.js が読み込まれていません。");
+setStatus("OCRエンジンを初期化中…");
 
-  try {
-    worker = await createWorker({
-      logger: (m) => {
-        if (m.status === "recognizing text" && typeof m.progress === "number") {
-          setProgress(Math.round(m.progress * 100));
-        } else if (m.status) {
-          setStatus(`OCR：${m.status}…`);
-        }
+// Tesseract v4 が読み込まれているか確認
+const { createWorker } = window.Tesseract || {};
+if (!createWorker) throw new Error("Tesseract.js が読み込まれていません。");
+
+// PDF.js を必ず準備
+await ensurePdfJsLoaded();
+
+try {
+  // logger は createWorker 側にだけ渡す（recognize には何も渡さない）
+  worker = await createWorker({
+    logger: (m) => {
+      if (typeof m?.progress === "number") {
+        setProgress(Math.round(m.progress * 100));
       }
-    });
+      if (m?.status) {
+        setStatus(`OCR：${m.status}…`);
+      }
+    }
+  });
+  await worker.loadLanguage("jpn");
+  await worker.initialize("jpn");
 
-    await worker.loadLanguage("jpn");
-    await worker.initialize("jpn");
+  // PDF → Canvas に変換してページごとにOCR
+  const buf = await pdfFile.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
 
-    const recognizePromise = worker.recognize(pdfFile).then(res => res?.data?.text || "");
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("OCRがタイムアウトしました。PDFのページ数/解像度を下げて再試行してください。")), TIMEOUT_MS)
-    );
+  setStatus("PDFを画像化中…");
+  let textParts = [];
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("OCRがタイムアウトしました。PDFのページ数/解像度を下げて再試行してください。")), TIMEOUT_MS)
+  );
 
-    setStatus("OCRを実行中…");
-    ocrText = await Promise.race([recognizePromise, timeoutPromise]);
-  } finally {
-    try { if (worker) await worker.terminate(); } catch (_) {}
-    setProgress(100);
+  // ページ逐次処理（メモリ溢れ対策）
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2.0 }); // 1.5〜2.0 で調整
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    setStatus(`OCRを実行中… (${i}/${pdf.numPages})`);
+
+    // ★ここが肝：recognize に “canvas だけ” を渡す（options禁止）
+    const recognizePromise = worker.recognize(canvas).then(res => res?.data?.text || "");
+    const pageText = await Promise.race([recognizePromise, timeoutPromise]);
+    textParts.push(pageText);
+
+    // ページ毎にざっくり進捗（最大90%まで）
+    setProgress(Math.min(90, Math.round((i / pdf.numPages) * 90)));
   }
+
+  ocrText = textParts.join("\n");
+} finally {
+  try { if (worker) await worker.terminate(); } catch (_) {}
+  setProgress(100);
+  setStatus("OCR：完了");
+}
+
 
   // ===== テキスト → 行 =====
   const lines = (ocrText || "")
@@ -208,3 +256,4 @@ async function runOCR() {
     if (ocrBtn) ocrBtn.disabled = false;
   }
 }
+
