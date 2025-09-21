@@ -22,9 +22,19 @@
 
   <!-- ライブラリ -->
   <!-- Tesseract.js -->
-  <script defer src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
-  <!-- XLSX.js（無ければ CSV フォールバックします） -->
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- XLSX.js（無ければ CSV フォールバックします） -->
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js"></script>
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
+    }
+  });
+</script>
+
 
   <!-- アプリ本体 -->
   <script defer src="./app.js"></script>
@@ -51,3 +61,4 @@
   <p class="hint">※ XLSX.js が読み込めない環境では CSV を自動ダウンロードします。</p>
 </body>
 </html>
+
