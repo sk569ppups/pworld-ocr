@@ -23,13 +23,19 @@
   <!-- ライブラリ -->
   <!-- Tesseract.js -->
     <!-- XLSX.js（無ければ CSV フォールバックします） -->
- <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js"></script>
+ <<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.min.js"></script>
 <script>
-  if (window.pdfjsLib) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js";
-  }
+  window.addEventListener("load", () => {
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.worker.min.js";
+      console.log("pdfjsLib ready:", window.pdfjsLib);
+    } else {
+      console.error("pdfjsLib not found!");
+    }
+  });
 </script>
+
 
 <script src="./app.js"></script>
 
@@ -57,6 +63,7 @@
   <p class="hint">※ XLSX.js が読み込めない環境では CSV を自動ダウンロードします。</p>
 </body>
 </html>
+
 
 
 
