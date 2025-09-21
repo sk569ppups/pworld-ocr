@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>P-WORLD 機種抽出ツール（修正用・安全版）</title>
+  <title>P-WORLD 機種抽出ツール（修正版・安全版）</title>
 
-  <!-- 簡易スタイル（任意） -->
+  <!-- 簡易スタイル -->
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; margin: 24px; line-height: 1.6; }
@@ -20,29 +20,29 @@
     .hint { font-size: 12px; opacity: .75; }
   </style>
 
-  <!-- ライブラリ -->
-  <!-- Tesseract.js -->
-    <!-- XLSX.js（無ければ CSV フォールバックします） -->
- <<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.min.js"></script>
-<script>
-  window.addEventListener("load", () => {
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.worker.min.js";
-      console.log("pdfjsLib ready:", window.pdfjsLib);
-    } else {
-      console.error("pdfjsLib not found!");
-    }
-  });
-</script>
+  <!-- OCRライブラリ -->
+  <!-- Tesseract.js v4 -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 
+  <!-- PDF.js (legacy版を利用) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.min.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/legacy/build/pdf.worker.min.js";
+        console.log("pdfjsLib ready:", window.pdfjsLib);
+      } else {
+        console.error("pdfjsLib not found!");
+      }
+    });
+  </script>
 
-<script src="./app.js"></script>
-
-
+  <!-- アプリ本体 -->
+  <script src="./app.js"></script>
 </head>
 <body>
-  <h1>P-WORLD 機種抽出ツール（修正用・安全版）</h1>
+  <h1>P-WORLD 機種抽出ツール（修正版・安全版）</h1>
 
   <div class="row">
     <label for="pdfFile">PDFファイル</label>
@@ -63,7 +63,3 @@
   <p class="hint">※ XLSX.js が読み込めない環境では CSV を自動ダウンロードします。</p>
 </body>
 </html>
-
-
-
-
